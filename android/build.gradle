@@ -1,0 +1,33 @@
+// Specify the Kotlin version
+//added section
+// ext {
+//     kotlin_version = '1.8.0' // Update to your desired Kotlin version
+// }
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+//added 2 sections below
+
+// Add the Kotlin Gradle plugin for the project
+// project(':app') {
+//     apply plugin: 'kotlin-android' // Ensure you apply this plugin
+// }
+
+// // Clean task
+// tasks.register("clean", Delete) {
+//     delete rootProject.buildDir
+// }
