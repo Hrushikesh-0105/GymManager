@@ -6,7 +6,7 @@ SnackBar customSnackBar(String message) {
     content: Center(
       child: Text(
         message,
-        style: style3().copyWith(fontSize: 18),
+        style: style3().copyWith(fontSize: 16, fontWeight: FontWeight.bold),
       ),
     ),
     duration: const Duration(seconds: 1, milliseconds: 500),

@@ -40,7 +40,7 @@ class CustomerRecords extends StatefulWidget {
 class _CustomerRecords extends State<CustomerRecords> {
   // final _ussdPhoneCallSmsPlugin = UssdPhoneCallSms();
   // final Telephony telephony = Telephony.instance;
-  FlutterNativeSms sms = FlutterNativeSms();
+  // FlutterNativeSms sms = FlutterNativeSms();
   List<Map<String, dynamic>> customerDataList = [];
 
   bool isLoading = true;
@@ -81,10 +81,10 @@ class _CustomerRecords extends State<CustomerRecords> {
     // double deviceHeight = MediaQuery.of(context).size.height;
     totalCardsInCurrentPage = 0; //this is must for the select all functions
     if (multiCardSelect) {
-      customerCardWidth = deviceWidth / 3 - 96;
+      customerCardWidth = deviceWidth - 96;
     } else {
       //why 48 why not 40 what is causing overflow?
-      customerCardWidth = deviceWidth / 3 - 48;
+      customerCardWidth = deviceWidth - 48;
     }
     return Stack(children: [
       Container(
@@ -241,7 +241,28 @@ class _CustomerRecords extends State<CustomerRecords> {
                           )),
                       if (expiredFilter) //diaplay the message button only when the expired filter is selected
                         IconButton(
-                            onPressed: () {},
+                            onPressed: () async {
+                              if (kDebugMode) {
+                                print(multiSelectedIds);
+                                print(numberOfCardsSelected);
+                              }
+                              await showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return multiMessageAlertDialog(
+                                      multiSelectedIds);
+                                },
+                              );
+                              multiSelectedIds.clear();
+                              multiCardSelect = false;
+                              selectAllCheckBox = false;
+                              numberOfCardsSelected = 0;
+                              if (kDebugMode) {
+                                print(multiSelectedIds);
+                                print(numberOfCardsSelected);
+                              }
+                              setState(() {});
+                            },
                             icon: Icon(
                               Icons.message_outlined,
                               color: Colors.white,
@@ -278,15 +299,9 @@ class _CustomerRecords extends State<CustomerRecords> {
               child: Container(
                 // color: Colors.amber,
                 child: (customerDataList.isNotEmpty && !isLoading)
-                    ? GridView.builder(
+                    ? ListView.builder(
                         //only for gridview
                         //Delete the grid delegate for listview
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3, // Number of columns
-                          mainAxisSpacing: 1, // Spacing between rows
-                          crossAxisSpacing: 10, // Spacing between columns
-                          childAspectRatio: 4.5, // Aspect ratio of each item
-                        ),
                         itemBuilder: (context, index) {
                           Map<String, dynamic> currentCustomer =
                               customerDataList[index];
@@ -477,6 +492,7 @@ class _CustomerRecords extends State<CustomerRecords> {
               child: Column(
                 // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Center(
                     child: Text(
@@ -589,10 +605,18 @@ class _CustomerRecords extends State<CustomerRecords> {
                       Expanded(
                         child: InkWell(
                           onTap: () async {
+                            bool messageSent = await sendMessage(
+                                messageText.text, messageNumber);
+                            if (messageSent) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  customSnackBar("SMS sent"),
+                                );
+                              }
+                            }
+                            setState(() {});
                             toggleMessageContainer = false;
                             toggleOpacity = false;
-                            sendMessage(messageText.text, messageNumber);
-                            setState(() {});
                           },
                           child: Container(
                             decoration: BoxDecoration(
@@ -712,7 +736,12 @@ class _CustomerRecords extends State<CustomerRecords> {
     setState(() {});
   }
 
-  void sendMessage(String typedMessage, String phoneNumber) async {
+  Future<bool> sendMessage(String typedMessage, String phoneNumber) async {
+    FlutterNativeSms sms = FlutterNativeSms();
+    bool retVal = false; //TODO change this not for both message and whatsapp
+    if (kDebugMode) {
+      print(typedMessage.length);
+    }
     if (messageCheckBox) {
       var status = await Permission.sms.status;
       if (status.isDenied ||
@@ -720,22 +749,22 @@ class _CustomerRecords extends State<CustomerRecords> {
           status.isPermanentlyDenied) {
         // Request the permission if it’s not granted
         status = await Permission.sms.request();
-      } else {
-        // print("SMS permission is already granted.");
+      }
+      if (await Permission.phone.status.isDenied) {
+        await Permission.phone.request();
+      }
+      status = await Permission.sms.status;
+      if (status.isGranted && await Permission.phone.status.isGranted) {
         try {
           var result = await sms.send(
-            phone: phoneNumber,
-            smsBody: typedMessage,
-            sim: '0',
-            reportByToast: false,
-          );
-          if (kDebugMode) {
-            print("\n\n\n\n\n\n");
-            print("result: $result");
-            print("\n\n\n\n\n\n");
-          }
+              phone: phoneNumber, smsBody: typedMessage, sim: "0");
+          retVal = true;
+          debugPrint("result is  ......: $result");
         } catch (e) {
           if (mounted) {
+            if (kDebugMode) {
+              print(e);
+            }
             ScaffoldMessenger.of(context)
                 .showSnackBar(customSnackBar("Failed to send sms"));
           }
@@ -758,23 +787,13 @@ class _CustomerRecords extends State<CustomerRecords> {
       }
       whatsappCheckBox = false;
     }
+    return retVal;
   }
 
   String cookMessage(String currentName, bool activeStatus, String dueAmount,
       String currentDate) {
-    String cookedMessage = "";
-    bool isDue = (int.parse(dueAmount) == 0 ? false : true);
-    //set max characters to 160
-    if (!activeStatus && isDue) {
-      cookedMessage =
-          "Hi $currentName, your membership has expired on $currentDate.\nKindly renew\nDue Amount: ₹$dueAmount.\nIgnore if paid.\nThank you!";
-    } else if (!activeStatus) {
-      cookedMessage =
-          "Hi $currentName, your membership has expired on $currentDate.\nKindly renew to keep up the momentum. Thank you!";
-    } else {
-      cookedMessage =
-          "Hi $currentName,Due Amount: ₹$dueAmount.Ignore if paid.Thank you!";
-    }
+    String cookedMessage =
+        "Hi $currentName, your membership expired on $currentDate. Due: ₹$dueAmount.";
     return cookedMessage;
   }
 
@@ -859,5 +878,103 @@ class _CustomerRecords extends State<CustomerRecords> {
       ScaffoldMessenger.of(context).showSnackBar(
           customSnackBar("$totalNumberOfRowsEffected Customer(s) deleted"));
     }
+  }
+
+  Widget multiMessageAlertDialog(List<int> multiSelectedIds) {
+    List<Map<String, dynamic>> customersSelected =
+        getPhoneNumbersFromIds(multiSelectedIds);
+    if (kDebugMode) {
+      print(customersSelected);
+    }
+    return AlertDialog(
+      title: Center(
+        child: Text(
+          "Message",
+          style: style1(fsize: 24).copyWith(fontWeight: FontWeight.bold),
+        ),
+      ),
+      backgroundColor: Color.fromARGB(255, 60, 60, 60),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Send sms to (${customersSelected.length}):",
+            style: style1().copyWith(
+              fontSize: 18,
+            ),
+          ),
+          Container(
+            height: 100,
+            padding: EdgeInsets.all(5),
+            decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(10)),
+            child: ListView.builder(
+                itemCount: customersSelected.length,
+                itemBuilder: (context, index) {
+                  return Text(
+                    "${customersSelected[index]["fullName"]}",
+                    style: style1().copyWith(fontSize: 18),
+                  );
+                }),
+          ),
+          SizedBox(
+            height: 5,
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  // Text color
+                  backgroundColor: Colors.indigo.shade400,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  //  backgroundBuilder: ,
+                  elevation: 5, // Button shadow
+                ),
+                onPressed: () async {
+                  for (Map<String, dynamic> customer in customersSelected) {
+                    DateTime custDueDate = DateTime.parse(customer["dueDate"]);
+                    String custDueDateString =
+                        "${custDueDate.day}/${custDueDate.month}/${custDueDate.year}";
+                    String customMessage = cookMessage(customer["fullName"],
+                        false, customer["dueAmount"], custDueDateString);
+                    bool smsSent = await sendMessage(
+                        customMessage, customer["phoneNumber"]);
+                    if (kDebugMode) {
+                      print(smsSent);
+                    }
+                  }
+                  if (mounted) {
+                    Navigator.pop(context);
+                  }
+                },
+                child: Text("Send", style: style1().copyWith(fontSize: 18))),
+          )
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> getPhoneNumbersFromIds(List<int> ids) {
+    List<Map<String, dynamic>> listOFCustomersSelected = [];
+    if (kDebugMode) {
+      print(customerDataList);
+    }
+    for (int id in ids) {
+      for (var customer in customerDataList) {
+        if (customer["id"] == id) {
+          listOFCustomersSelected.add({
+            "phoneNumber": customer["phoneNumber"],
+            "fullName": customer["fullName"],
+            "dueDate": customer["dueDate"],
+            "dueAmount": customer["dueAmount"]
+          });
+        }
+      }
+    }
+    return listOFCustomersSelected;
   }
 }

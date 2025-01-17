@@ -9,7 +9,7 @@
         <package android:name="com.whatsapp" />
     </queries>
     <application
-        android:label="gym_app3"
+        android:label="Power Fitness"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
